@@ -13,12 +13,28 @@ export default interface Boksi {
 		/**
 		 *
 		 */
-		launch: Hook<void>;
+		native: {
+			/**
+			 *
+			 */
+			launch: Hook<void>;
+	
+			/**
+			 *
+			 */
+			request: Hook<IncomingMessage>;
+		},
 
 		/**
 		 *
 		 */
-		request: Hook<IncomingMessage>;
+		custom: {
+
+			/**
+			 *
+			 */
+			[ name: string ]: Hook<any>;
+		}
 	},
 
 	/**

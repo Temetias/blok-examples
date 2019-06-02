@@ -1,14 +1,11 @@
 import { IncomingMessage } from "http";
 
-/**
- *
- */
-export default interface Boksi {
-
+export interface BoksiHooks {
+	
 	/**
 	 *
 	 */
-	hooks: {
+	native: {
 
 		/**
 		 *
@@ -19,20 +16,20 @@ export default interface Boksi {
 		 *
 		 */
 		request: Hook<IncomingMessage>;
-	},
+	}
 
 	/**
 	 *
 	 */
-	API: {
-
+	custom: {
+		[name: string]: Hook<any>;
 	}
 }
 
 /**
  *
  */
-interface Hook<T> {
+export interface Hook<T> {
 
 	/**
 	 *
