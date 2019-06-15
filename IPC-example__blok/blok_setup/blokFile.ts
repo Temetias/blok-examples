@@ -1,4 +1,3 @@
-import IPC from "node-ipc";
 import { IncomingMessage } from "http";
 import blokConf from "./blok-conf.json";
 import { hookCommunications } from "./boksiTypes.js";
