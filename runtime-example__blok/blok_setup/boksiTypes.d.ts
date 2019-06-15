@@ -17,12 +17,17 @@ export default interface Boksi {
 			/**
 			 *
 			 */
-			launch: Hook<void>;
+			launch: Hook<string>;
 	
 			/**
 			 *
 			 */
 			request: Hook<IncomingMessage>;
+
+			/**
+			 *
+			 */
+			[ name: string ]: Hook<any>;
 		},
 
 		/**
@@ -36,13 +41,6 @@ export default interface Boksi {
 			[ name: string ]: Hook<any>;
 		}
 	},
-
-	/**
-	 *
-	 */
-	API: {
-
-	}
 }
 
 /**
@@ -53,10 +51,10 @@ interface Hook<T> {
 	/**
 	 *
 	 */
-	link(callBack: (() => void)): void;
+	link(callBack: ((data: T) => Promise<void>)): void;
 	
 	/**
 	 *
 	 */
-	unlink(callBack: (() => void)): void;
+	unlink(callBack: (() => Promise<void>)): void;
 }

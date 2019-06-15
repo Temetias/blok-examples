@@ -1,6 +1,8 @@
 import IPC from "node-ipc";
 import { IncomingMessage } from "http";
 import blokConf from "./blok-conf.json";
+import { hookCommunications } from "./boksiTypes.js";
+import { isInstanceOfInterface } from "./patterns.js";
 
 /**
  *
@@ -8,31 +10,31 @@ import blokConf from "./blok-conf.json";
 class Hook<T> {
 
 	/**
-	 * 
+	 *
 	 */
-	public name: string;
+	private callbacks: ((data: T) => Promise<void>)[] = [];
 
 	/**
 	 *
 	 */
-	private callbacks: ((data: T) => void)[] = [];
+	public constructor(
+
+		/**
+		 * 
+		 */
+		public name: string,
+	) {}
 
 	/**
 	 *
 	 */
-	public constructor(name: string) {
-		this.name = name;
-	}
-
-	/**
-	 *
-	 */
-	public link(callback: ((data: T) => void)): void {
-		const bundle: IPCHookLinkMessage = {
-			blokName: blokConf.name,
+	public link(callback: ((data: T) => Promise<void>)): void {
+		const bundle: hookCommunications.IPCHookLinkMessage = {
+			isLinkMessage: true,
 			hookName: this.name,
-		}
-		IPC.of["boksi-hook-ipc"].emit("boksi-hook-ipc-link", JSON.stringify(bundle));
+			blokName: blokConf.name,
+		};
+		process.send!(JSON.stringify(bundle));
 		this.callbacks.push(callback);
 	}
 
@@ -40,19 +42,23 @@ class Hook<T> {
 	 *
 	 */
 	public fire(data: any): void {
-		const bundle: IPCHookMessage = {
-			data,
+		const bundle: hookCommunications.IPCFireHookMessage = {
+			isFireMessage: true,
 			hookName: this.name,
 			blokName: blokConf.name,
-		}
-		IPC.of["boksi-hook-ipc"].emit("boksi-hook-ipc-fire", JSON.stringify(bundle));
+			data,
+		};
+		process.send!(JSON.stringify(bundle));
 	}
 
 	/**
 	 *
 	 */
 	public triggerCallbacks(data: any): void {
-		this.callbacks.forEach(cb => cb(data));
+		Promise.all(this.callbacks.map(cb => cb(data)))
+			.then(() => process.send!(JSON.stringify({ isSuccessMessage: true })))
+			.catch(() => process.send!(JSON.stringify({ isFailureMessage: true })))
+		;
 	}
 }
 
@@ -64,32 +70,31 @@ class Boksi {
 	/**
 	 *
 	 */
-	public hooks: BoksiHooks;
+	public hooks: BoksiHooks = {
+		native: {
+			launch: new Hook<string>("launch"),
+			request: new Hook<IncomingMessage>("request"),
+			termination: new Hook<void>("termination"),
+		},
+		custom: {},
+	};
 
 	/**
 	 *
 	 */
 	public constructor(_: void) {
-		IPC.config.id = "boksi-hook-ipc-client";
-		IPC.config.retry = 1500;
-		IPC.config.silent = true;
-		IPC.connectTo("boksi-hook-ipc");
-		this.hooks = {
-			native: {
-				launch: new Hook<void>("launch"),
-				request: new Hook<IncomingMessage>("request"),
-			},
-			custom: {},
-		}
-		IPC.of["boksi-hook-ipc"].on("boksi-hook-ipc-fire", (request: string) => {
-			const requestBundle: IPCHookMessage = JSON.parse(request);
-			if (blokConf.name === requestBundle.blokName) {
-				return;
-			}
-			if (this.hooks.native[requestBundle.hookName]) {
-				this.hooks.native[requestBundle.hookName].triggerCallbacks(requestBundle.data);
-			} else if (this.hooks.custom[requestBundle.hookName]) {
-				this.hooks.custom[requestBundle.hookName].triggerCallbacks(requestBundle.data);
+		process.on("message", message => {
+			const bundle = JSON.parse(message);
+			if (isInstanceOfInterface<hookCommunications.IPCFireHookMessage>(bundle, "isFireMessage")) {
+				if (this.hooks.native[bundle.hookName]) {
+					this.hooks.native[bundle.hookName].triggerCallbacks(bundle.data);
+				} else if (this.hooks.custom[bundle.hookName]) {
+					this.hooks.native[bundle.hookName].triggerCallbacks(bundle.data);
+				}
+			} else if (isInstanceOfInterface<hookCommunications.IPCHookCreationMessage>(bundle, "isCreationMessage")) {
+				if (!this.hooks.custom[bundle.hookName] && !this.hooks.native[bundle.hookName]) {
+					this.hooks.custom[bundle.hookName] = new Hook(bundle.hookName);
+				}
 			}
 		});
 	}
@@ -99,70 +104,26 @@ class Boksi {
 	 */
 	public createHook<T>(name: string): void {
 		this.hooks.custom[name] = new Hook<T>(name);
-		const bundle: IPCHookCreationMessage = {
+		const bundle: hookCommunications.IPCHookCreationMessage = {
+			isCreationMessage: true,
 			hookName: name,
 		}
-		IPC.of["boksi-hook-ipc"].emit("boksi-hook-ipc-create", JSON.stringify(bundle));
+		process.send!(JSON.stringify(bundle));
 	}
 }
 
 interface BoksiHooks {
 	native: {
-		launch: Hook<void>;
+		launch: Hook<string>;
 		request: Hook<IncomingMessage>;
+		termination: Hook<void>;
+
+		// TypeScript dodge.
 		[name: string]: Hook<any>;
 	},
 	custom: {
 		[name: string]: Hook<any>;
 	}
-}
-
-/**
- *
- */
-interface IPCHookLinkMessage {
-
-	/**
-	 *
-	 */
-	hookName: string;
-
-	/**
-	 *
-	 */
-	blokName: string;
-}
-
-/**
- *
- */
-interface IPCHookMessage {
-
-	/**
-	 *
-	 */
-	hookName: string;
-
-	/**
-	 *
-	 */
-	blokName: string;
-
-	/**
-	 *
-	 */
-	data: any;
-}
-
-/**
- *
- */
-interface IPCHookCreationMessage {
-
-	/**
-	 *
-	 */
-	hookName: string;
 }
 
 export default new Boksi();
